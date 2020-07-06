@@ -1,0 +1,71 @@
+```{r include=FALSE}
+library(DBI)
+library(RSQLite)
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(directlabels)
+library(gridExtra)
+```
+```{r}
+age=read.csv("MDCOVID19_CasesByAgeDistribution.csv",header=T,stringsAsFactors=F,fileEncoding="UTF-8-BOM")
+county=read.csv("MDCOVID19_CasesByCounty.csv",header=T,stringsAsFactors=F,fileEncoding="UTF-8-BOM")
+gender=read.csv("MDCOVID19_CasesByGenderDistribution.csv",header=T,stringsAsFactors=F,fileEncoding="UTF-8-BOM")
+race=read.csv("MDCOVID19_CasesByRaceAndEthnicityDistribution.csv",header=T,stringsAsFactors=F,fileEncoding="UTF-8-BOM")
+
+con=dbConnect(RSQLite::SQLite(),":memory:")
+dbWriteTable(con,"county",county)
+dbWriteTable(con,"race",race)
+dbWriteTable(con,"age",age)
+dbWriteTable(con,"gender",gender)
+
+data=dbGetQuery(con,"SELECT age.DATE AS DATE, 
+                Allegany, Anne_Arundel, Baltimore, Baltimore_City, Calvert, Caroline, Carroll, Cecil, Charles, Dorchester, Frederick, Garrett, Harford, 
+                Howard, Kent, Montgomery, Prince_Georges, Queen_Annes, Somerset, St_Marys, Talbot, Washington, Wicomico, Worcester,
+                African_American, White, Hispanic, Asian, 
+                Age_0_to_9, Age_10_to_19, Age_20_to_29, Age_30_to_39, Age_40_to_49, Age_50_to_59, Age_60_to_69, Age_70_to_79, Age_80plus
+                FROM age
+                INNER JOIN race on race.DATE=age.DATE
+                INNER JOIN county on county.DATE=age.DATE")
+
+data$DATE=substr(data$DATE,1,nchar(data$DATE)-12)
+data$DATE=as.Date(data$DATE,"%Y/%m/%d")
+```
+```{r warning=FALSE, message=FALSE}
+county_names=colnames(data)[2:25]
+race_names=colnames(data)[26:29]
+age_names=colnames(data)[30:38]
+dat_long=
+  data %>% 
+  pivot_longer(cols = county_names, names_to = "county", values_to = "county_cases") %>%
+  pivot_longer(cols = race_names, names_to = "race", values_to = "race_cases") %>%
+  pivot_longer(cols = age_names, names_to = "age", values_to = "age_cases")
+
+county_plot=ggplot(dat_long, aes(x = DATE, y = county_cases, group = county, color = county)) +
+  geom_line(show.legend=F) + labs(x = "Date", y = "Cases") + 
+  geom_dl(aes(label=county),method=list(dl.trans(x=x+.2),"last.points",cex=.8)) +
+  scale_x_date(expand=c(0, 30)) +
+  theme_minimal()
+
+race_plot=ggplot(dat_long, aes(x = DATE, y = race_cases, group = race, color = race)) +
+  geom_line(show.legend=F) + labs(x = "Date", y = "Cases") + 
+  geom_dl(aes(label=race),method=list(dl.trans(x=x+.2),"last.points",cex=.8)) +
+  scale_x_date(expand=c(0,30)) +
+  theme_minimal()
+
+age_plot=ggplot(dat_long, aes(x = DATE, y = age_cases, group = age, color = age)) +
+  geom_line(show.legend=F) + labs(x = "Date", y = "Cases") + 
+  geom_dl(aes(label=age),method=list(dl.trans(x=x+.2),"last.points",cex=.8)) +
+  scale_x_date(expand=c(0, 30)) +
+  theme_minimal()
+
+county_plot
+race_plot
+age_plot
+
+
+
+dbDisconnect(con)
+
+```
+
